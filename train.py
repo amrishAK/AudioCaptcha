@@ -7,6 +7,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 import os
 import cv2
 import numpy
+from PIL import Image, ImageOps, ImageEnhance
 import string
 import random
 import argparse
@@ -20,10 +21,9 @@ def create_model(captcha_length, captcha_num_symbols, input_shape, model_depth=5
   x = input_tensor
   for i, module_length in enumerate([module_size] * model_depth):
       for j in range(module_length):
-          x = keras.layers.Conv2D(32*2**min(i, 3), kernel_size=3, padding='same', kernel_initializer='he_uniform')(x)
+          x = keras.layers.Conv2D(32*2**min(i, 3), kernel_size=(3,3), padding='same', kernel_initializer=keras.initializers.he_uniform(seed=None))(x)
           x = keras.layers.BatchNormalization()(x)
           x = keras.layers.Activation('relu')(x)
-          x = keras.layers.Dropout(0.35)(x)
       x = keras.layers.MaxPooling2D(2)(x)
 
   x = keras.layers.Flatten()(x)
@@ -48,7 +48,7 @@ class ImageSequence(keras.utils.Sequence):
         self.files = dict(zip(map(lambda x: x.split('.')[0], file_list), file_list))
         self.used_files = []
         self.count = len(file_list)
-        
+
 
     def __len__(self):
         return int(numpy.floor(self.count / self.batch_size))
@@ -66,7 +66,9 @@ class ImageSequence(keras.utils.Sequence):
 
             # We have to scale the input pixel values to the range [0, 1] for
             # Keras so we divide by 255 since the image is 8-bit RGB
-            image = cv2.imread(os.path.join(self.directory_name, random_image_file),0)
+            image = Image.open(os.path.join(self.directory_name, random_image_file))
+            image = ImageOps.grayscale(image)
+            image = ImageOps.autocontrast(image, cutoff=10, ignore=None)
             processed_data = numpy.array(image) / 255.0
             processed_data = numpy.expand_dims(processed_data, axis=2)
             X[i] = processed_data
@@ -83,9 +85,12 @@ class ImageSequence(keras.utils.Sequence):
         return X, y
 
 def main():
+    #default device
+    device = '/device:CPU:0'
+
     parser = argparse.ArgumentParser()
-    parser.add_argument('--width', help='Width of captcha image', type=int)
-    parser.add_argument('--height', help='Height of captcha image', type=int)
+    parser.add_argument('--width', help='Width of captcha image', type=int, default=80)
+    parser.add_argument('--height', help='Height of captcha image', type=int, default=80)
     parser.add_argument('--length', help='Length of captchas in characters', type=int)
     parser.add_argument('--batch-size', help='How many images in training captcha batches', type=int)
     parser.add_argument('--train-dataset', help='Where to look for the training image dataset', type=str)
@@ -94,15 +99,8 @@ def main():
     parser.add_argument('--input-model', help='Where to look for the input model to continue training', type=str)
     parser.add_argument('--epochs', help='How many training epochs to run', type=int)
     parser.add_argument('--symbols', help='File with the symbols to use in captchas', type=str)
+    parser.add_argument('--gpu', help='used to run in gpu', type=str)
     args = parser.parse_args()
-
-    if args.width is None:
-        print("Please specify the captcha image width")
-        exit(1)
-
-    if args.height is None:
-        print("Please specify the captcha image height")
-        exit(1)
 
     if args.length is None:
         print("Please specify the captcha length")
@@ -132,17 +130,18 @@ def main():
         print("Please specify the captcha symbols file")
         exit(1)
 
+    if args.gpu == 'gpu':
+        physical_devices = tf.config.experimental.list_physical_devices('GPU')
+        assert len(physical_devices) > 0, "No GPU available!"
+        tf.config.experimental.set_memory_growth(physical_devices[0], True)
+        device = '/device:GPU:0'
+
     captcha_symbols = None
     with open(args.symbols) as symbols_file:
         captcha_symbols = symbols_file.readline()
 
-    # physical_devices = tf.config.experimental.list_physical_devices('GPU')
-    # assert len(physical_devices) > 0, "No GPU available!"
-    # tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    with tf.device(device):
 
-    # with tf.device('/device:GPU:0'):
-    with tf.device('/device:CPU:0'):
-    # with tf.device('/device:XLA_CPU:0'):
         model = create_model(args.length, len(captcha_symbols), (args.height, args.width,1))
 
         if args.input_model is not None:
@@ -157,8 +156,11 @@ def main():
         training_data = ImageSequence(args.train_dataset, args.batch_size, args.length, captcha_symbols, args.width, args.height)
         validation_data = ImageSequence(args.validate_dataset, args.batch_size, args.length, captcha_symbols, args.width, args.height)
 
+        if not os.path.exists('logs'):
+          os.makedirs('logs')
+
         callbacks = [keras.callbacks.EarlyStopping(patience=3),
-                     keras.callbacks.CSVLogger('log.csv'),
+                     keras.callbacks.CSVLogger(os.path.join('logs','log_' + args.output_model_name + '.csv')),
                      keras.callbacks.ModelCheckpoint(args.output_model_name+'.h5', save_best_only=False)]
 
         # Save the model architecture to JSON
