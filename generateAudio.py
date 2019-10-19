@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
 
 import os
-import numpy
 import random
-import string
-import cv2
 import argparse
-import captcha.image
 from gtts import gTTS
-        
-def scramble_image_name(image_name):
+from sys import exit
+
+def scramble_audio_name(audio_name):
     import hashlib
     m = hashlib.sha1()
-    m.update(image_name.encode('utf-8'))
+    m.update(audio_name.encode('utf-8'))
     return m.hexdigest()
 
 def main():
@@ -39,12 +36,12 @@ def main():
     if args.symbols is None:
         print("Please specify the captcha symbols file")
         exit(1)
-        
+
     symbols_file = open(args.symbols, 'r')
     captcha_symbols = symbols_file.readline().strip()
     symbols_file.close()
 
-    print("Generating captchas with symbol set {" + captcha_symbols + "}")
+    print("Generating audio file captchas with symbol set {" + captcha_symbols + "}")
 
     if not os.path.exists(args.output_dir):
         print("Creating output directory " + args.output_dir)
@@ -52,10 +49,21 @@ def main():
 
     for i in range(args.count):
         captcha_text = ''.join([random.choice(captcha_symbols) for j in range(args.length)])
+        audio_name_scrambled = captcha_text
+        if args.scramble:
+            audio_name_scrambled = scramble_audio_name(captcha_text)
         tts = gTTS(text=captcha_text, lang='en')
-        captcha_text_filename=captcha_text+".wav"
-        filepath='./'+args.output_dir+'/'+captcha_text_filename
-        tts.save(filepath)
+
+        audio_path = os.path.join(args.output_dir, audio_name_scrambled+'.mp3')
+        if os.path.exists(audio_path):
+            version = 1
+            while os.path.exists(os.path.join(args.output_dir, audio_name_scrambled + '_' + str(version) + '.mp3')):
+                version += 1
+            audio_path = os.path.join(args.output_dir, audio_name_scrambled + '_' + str(version) + '.mp3')
+
+        tts.save(audio_path)
+
+    print("Audio file captchas generated successfully!")
 
 if __name__ == '__main__':
     main()

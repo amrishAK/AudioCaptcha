@@ -5,15 +5,12 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 import os
-import cv2
 import numpy
-from PIL import Image, ImageOps, ImageEnhance
-import string
+from PIL import Image, ImageOps
 import random
 import argparse
 import tensorflow as tf
 import tensorflow.keras as keras
-import matplotlib.pyplot as plt
 
 # Build a Keras model given some parameters
 def create_model(captcha_length, captcha_num_symbols, input_shape, model_depth=5, module_size=2):
@@ -89,8 +86,8 @@ def main():
     device = '/device:CPU:0'
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--width', help='Width of captcha image', type=int, default=80)
-    parser.add_argument('--height', help='Height of captcha image', type=int, default=80)
+    parser.add_argument('--width', help='Width of captcha image', type=int)
+    parser.add_argument('--height', help='Height of captcha image', type=int)
     parser.add_argument('--length', help='Length of captchas in characters', type=int)
     parser.add_argument('--batch-size', help='How many images in training captcha batches', type=int)
     parser.add_argument('--train-dataset', help='Where to look for the training image dataset', type=str)
@@ -101,6 +98,14 @@ def main():
     parser.add_argument('--symbols', help='File with the symbols to use in captchas', type=str)
     parser.add_argument('--gpu', help='used to run in gpu', type=str)
     args = parser.parse_args()
+
+    if args.width is None:
+        print("Please specify the captcha image width")
+        exit(1)
+
+    if args.height is None:
+        print("Please specify the captcha image height")
+        exit(1)
 
     if args.length is None:
         print("Please specify the captcha length")
