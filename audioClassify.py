@@ -5,14 +5,11 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 import os
-import cv2
 import numpy
-import string
-import random
 import argparse
 import tensorflow as tf
 import tensorflow.keras as keras
-from PIL import Image, ImageOps, ImageEnhance
+from PIL import Image, ImageOps
 
 
 def decode(characters, y):
@@ -80,8 +77,13 @@ def main():
                 (c, h, w) = image.shape
                 image = image.reshape([-1, c, h, w])
                 prediction = model.predict(image)
+
+                #replacing the file type back to .mp3 post prediction
+                x = x.replace('.png', '.mp3')
+
                 output_file.write(x + "," + decode(captcha_symbols, prediction) + "\n")
-                
+
+                print('Classified ' + x)
     print("Classifying captchas completed!")
 
 if __name__ == '__main__':
